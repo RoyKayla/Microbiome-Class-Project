@@ -1,0 +1,625 @@
+#Coding Assignment Final Project Basic Steps
+
+#all files must be saved as .txt or tab delineated file 
+Echo "Importing the FAstq Data"
+
+# in powershell scp from to scp is a moving function . current working directory 
+
+cd \Users\gfg\OneDrive - purdue.edu\Microbiome Analysis Class\IBD vs Healthy
+
+scp * roy174@bell.rcac.purdue.edu:/depot/microbiome/data/ANSC516/Kayla 
+
+# * anything in that folder
+
+Echo "Creating the manifest file in Excel"
+#Make sure to copy sequences
+
+cd #current working directory where files are 
+ls -1 "$PWD/"*R1*
+ls -1 "$PWD/"*R2*
+
+# print working directory and then print files that have any thing before R2 and anything after but must contain the R2  
+
+Echo "importing Meta Data and manifest for samples and positive controls to the depot and scratch space; depot is permanent storage while scratch is 30 day working storage"
+
+cd \Users\gfg\OneDrive - purdue.edu\Microbiome Analysis Class
+
+scp Meta_Data_IBD_vs_Healthy.tsv.txt roy174@bell.rcac.purdue.edu:/depot/microbiome/data/ANSC516/Kayla 
+
+scp Meta_Data_IBD_vs_Healthy.tsv.txt roy174@bell.rcac.purdue.edu:/scratch/bell/roy174/files_for_microanlaysis_IBD_study/
+
+
+scp Meta_Data_Control_Samples.txt roy174@bell.rcac.purdue.edu:/depot/microbiome/data/ANSC516/Kayla 
+
+scp Meta_Data_Control_Samples.txt roy174@bell.rcac.purdue.edu:/scratch/bell/roy174/files_for_microanlaysis_IBD_study/
+
+
+scp Manifest_Controls.txt roy174@bell.rcac.purdue.edu:/depot/microbiome/data/ANSC516/Kayla 
+
+scp Manifest_Controls.txt roy174@bell.rcac.purdue.edu:/scratch/bell/roy174/files_for_microanlaysis_IBD_study/
+
+
+scp manifest_IBD_vs_Healthy.txt roy174@bell.rcac.purdue.edu:/depot/microbiome/data/ANSC516/Kayla 
+
+scp manifest_IBD_vs_Healthy.txt roy174@bell.rcac.purdue.edu:/scratch/bell/roy174/files_for_microanlaysis_IBD_study/
+
+Echo "part of code that can be made into a slurm; creation of the deumx file"
+
+# Creating a Demux.qza file in order to determine how much sequence to remove based on quality scores you need to known amplicon length - foward keep + reverse keep= bp overlap
+#you want at least 50bp overall and you want 13 bp removal and to keep quality scores 25% tile above a 20
+
+module load bioinfo
+module load Qiime/2-2022.8
+cd /scratch/bell/roy174/files_for_microanlaysis_IBD_study/
+
+#list the version of qiime you want to load 
+
+#qiime tools import \
+#--type 'SampleData[PairedEndSequencesWithQuality]' \
+#--input-path <manifest.filename> \
+#--input-format PairedEndFastqManifestPhred33V2 \
+#--output-path demux.qza
+
+# example code want paired because we have foward and reverse although there is single and \ and then without running the command
+
+Echo "demux samples and demux controls"
+
+qiime tools import \
+--type 'SampleData[PairedEndSequencesWithQuality]' \
+--input-path manifest_IBD_vs_Healthy.txt \
+--input-format PairedEndFastqManifestPhred33V2 \
+--output-path demuxIBD.qza
+
+qiime tools import \
+--type 'SampleData[PairedEndSequencesWithQuality]' \
+--input-path Manifest_Controls.txt \
+--input-format PairedEndFastqManifestPhred33V2 \
+--output-path demuxC.qza
+
+#Convert to qza so can read and determine the sequence lengths to cut
+
+#qiime demux summarize \
+ # --i-data demux.qza \
+ # --o-visualization demux.qzv
+
+# order is program , package, function for line one 
+
+qiime demux summarize \
+--i-data demuxC.qza \
+--o-visualization demuxC.qzv
+
+qiime demux summarize \
+  --i-data demuxIBD.qza \
+  --o-visualization demuxIBD.qzv
+
+#Echo "go in powershell and copy the demux qzv to look at what you will limit
+
+#in powershell
+
+# cd where you want files to be deposited
+
+scp roy174@bell.rcac.purdue.edu:/scratch/bell/roy174/files_for_microanlaysis_IBD_study/demuxIBD.qzv *
+scp roy174@bell.rcac.purdue.edu:/scratch/bell/roy174/files_for_microanlaysis_IBD_study/demuxC.qzv *
+
+#Echo DAD2 step
+
+qiime dada2 denoise-paired \--i-demultiplexed-seqs demuxC.qza \
+--p-trim-left-f 13 \
+--p-trim-left-r 9 \
+--p-trunc-len-f 296 \
+--p-trunc-len-r 223 \
+--o-table tableC.qza \
+--o-representative-sequences rep-seqsC.qza \
+--o-denoising-stats denoising-statsC.qza
+
+
+qiime dada2 denoise-paired \--i-demultiplexed-seqs demuxIBD.qza \
+--p-trim-left-f 13 \
+--p-trim-left-r 8 \
+--p-trunc-len-f 291 \
+--p-trunc-len-r 234 \
+--o-table tableIBD.qza \
+--o-representative-sequences rep-seqsIBD.qza \
+--o-denoising-stats denoising-statsIBD.qza
+
+# want to do the filter step on your table before you read out the table but you need a classifer
+# convert to qzv for controls 
+
+qiime metadata tabulate \
+--m-input-file denoising-statsC.qza \
+--o-visualization denoising-statsC.qzv
+
+qiime feature-table summarize \
+--i-table tableC.qza \
+--o-visualization tableC.qzv \
+--m-sample-metadata-file Meta_Data_Control_Samples.txt
+
+qiime feature-table tabulate-seqs \
+--i-data rep-seqsC.qza \
+--o-visualization rep-seqsC.qzv
+
+#conversion IBD
+
+qiime metadata tabulate \
+--m-input-file denoising-statsIBD1.qza \
+--o-visualization denoising-statsIBD1.qzv
+
+qiime feature-table summarize \
+--i-table tableIBD1.qza \
+--o-visualization tableIBD1.qzv \
+--m-sample-metadata-file Meta_Data_IBD_vs_Healthy.txt
+
+qiime feature-table tabulate-seqs \
+--i-data rep-seqsIBD1.qza \
+--o-visualization rep-seqsIBD1.qzv
+
+## on powershell move files for the visualization step 
+
+## Creating a custom classifiers 
+
+wget https://data.qiime2.org/2022.8/common/silva-138-99-seqs.qza
+wget https://data.qiime2.org/2022.8/common/silva-138-99-tax.qza
+
+qiime feature-classifier extract-reads \
+--i-sequences silva-138-99-seqs.qza \
+--p-f-primer CCTACGGGNGGCWGCAG \
+--p-r-primer GACTACHVGGGTATCTAATCC \
+--p-min-length 100 --p-max-length 600 --p-n-jobs 12 --o-reads ref-seqs-v3-v4.qza 
+
+# choose based on the length of the amplicon so it is 150bp + length of the amplicon 
+
+#training the classifer to the sequence 
+
+
+
+qiime feature-classifier fit-classifier-naive-bayes \
+--i-reference-reads ref-seqs-v3-v4.qza \
+--i-reference-taxonomy silva-138-99-tax.qza \
+--o-classifier silva-classifier-v3-v4.qza
+
+# training the classifier to your rep seqs file 
+qiime feature-classifier classify-sklearn \
+  --i-classifier silva-classifier-v3-v4.qza \
+  --i-reads rep-seqsIBD.qza \
+  --p-n-jobs -1 \
+  --o-classification taxonomyIBD.qza
+
+qiime metadata tabulate \
+  --m-input-file taxonomyIBD.qza \
+  --o-visualization taxonomyIBD.qzv  ##Convert to .qzv
+
+#training for the control
+
+# training the classifier to your rep seqs file 
+# This will be used for the taxonomy barplot 
+
+qiime feature-classifier classify-sklearn \
+  --i-classifier silva-classifier-v3-v4.qza \
+  --i-reads rep-seqsC.qza \
+  --p-n-jobs -1 \
+  --o-classification taxonomyC.qza
+
+qiime metadata tabulate \
+  --m-input-file taxonomyC.qza \
+  --o-visualization taxonomyC.qzv  ##Convert to .qzv
+
+
+# filter the table to remove mitochondrial sequences 
+
+qiime taxa filter-table \
+  --i-table tableIBD.qza \
+  --i-taxonomy taxonomyIBD.qza \
+  --p-exclude mitochondria,chloroplast \
+  --o-filtered-table table-no-mitochondria-no-chloroplast.qza
+
+qiime taxa filter-table \
+  --i-table tableC.qza \
+  --i-taxonomy taxonomyC.qza \
+  --p-exclude mitochondria,chloroplast \
+  --o-filtered-table table-no-mitochondria-no-chloroplastC.qza
+
+
+#Rename files so that the filtered one is table.qza
+
+mv tableIBD.qza table-with-mitochondria-and-chloroplast.qza
+mv table-no-mitochondria-no-chloroplast.qza tableIBD.qza
+
+mv tableC.qza table-with-mitochondria-and-chloroplastC.qza
+mv table-no-mitochondria-no-chloroplastC.qza tableC.qza
+
+#### Making the rooted-tree 
+qiime phylogeny align-to-tree-mafft-fasttree \
+  --i-sequences rep-seqsIBD.qza \
+  --o-alignment aligned-rep-seqsIBD.qza \
+  --o-masked-alignment masked-aligned-rep-seqsIBD.qza \
+  --o-tree unrooted-treeIBD.qza \
+  --o-rooted-tree rooted-treeIBD.qza
+
+### Check the background and relative abundances of the controls to determine if you need to eliminate any taxa
+
+qiime taxa barplot \
+  --i-table tableC.qza \
+  --i-taxonomy taxonomyC.qza \
+  --m-metadata-file Meta_Data_Control_Samples.txt \
+  --o-visualization taxa-bar-plotC.qzv
+
+# making taxa bar-plot for the IBD group
+
+qiime taxa barplot \
+  --i-table tableIBD.qza \
+  --i-taxonomy taxonomyIBD.qza \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --o-visualization taxa-bar-plotsIBD.qzv
+
+# Statistical testing for the taxa bar plots must make a special artifact of suito counting in order to run the amcom testing 
+
+qiime composition add-pseudocount \
+  --i-table tableIBD.qza \
+  --o-composition-table comp-tableIBD.qza
+
+qiime composition add-pseudocount \
+  --i-table tableC.qza \
+  --o-composition-table comp-tableC.qza
+
+#Ancom testing 
+qiime composition ancom \
+  --i-table comp-tableIBD.qza \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --o-visualization ancom-subjectIBD.qzv
+
+qiime composition ancom \
+  --i-table comp-tableC.qza \
+  --m-metadata-file Meta_Data_Control_Samples.txt \
+  --m-metadata-column subject \
+  --o-visualization ancom-subjectC.qzv
+
+
+qiime composition ancom \
+  --i-table comp-tableC.qza \
+  --m-metadata-file Meta_Data_Control_Samples.txt \
+  --o-visualization ancom-subjectC.qzv
+
+### Start the alpha refraction in order to pick the sampling depth 
+
+qiime diversity alpha-rarefaction \
+  --i-table tableIBD.qza \
+  --i-phylogeny rooted-treeIBD.qza \
+  --p-max-depth 5000 \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --o-visualization alpha-rarefactionIBD.qzv
+#the depth for the alpha refraction should be the increment which the plot will go by
+
+## To make the alpha and beta diversity
+qiime diversity core-metrics-phylogenetic \
+  --i-phylogeny rooted-treeIBD.qza \
+  --i-table tableIBD.qza \
+  --p-sampling-depth 25463 \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --output-dir core-metrics-results
+
+### Running alpha diversity 
+#Faith's PD
+qiime diversity alpha-group-significance \
+  --i-alpha-diversity core-metrics-results/faith_pd_vector.qza \
+  --m-metadata-file  Meta_Data_IBD_vs_Healthy.txt \
+  --o-visualization core-metrics-results/faith-pd-group-significanceIBD.qzv
+
+#Shannon's Index
+qiime diversity alpha-group-significance \
+  --i-alpha-diversity core-metrics-results/shannon_vector.qza  \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --o-visualization core-metrics-results/chao1-group-significanceIBD.qzv
+
+#creating observed features vector
+qiime diversity alpha \
+  --i-table tableIBD.qza \
+  --p-metric observed_features \
+  --o-alpha-diversity observed_features_vector.qza
+
+# creating the observed features vector 
+
+qiime diversity alpha-group-significance \
+  --i-alpha-diversity core-metrics-results/observed_features_vector.qza  \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --o-visualization core-metrics-results/observed_featuresIBD.qzv
+
+# creating the observed features alpha diversity 
+
+#observed features
+qiime diversity alpha \
+  --i-table tableIBD.qza \
+  --p-metric chao1 \
+  --o-alpha-diversity chao1_vector.qza
+
+# doing the alpha significance on this 
+
+qiime diversity alpha-group-significance \
+  --i-alpha-diversity core-metrics-results/chao1_vector.qza  \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --o-visualization core-metrics-results/chao1IBD.qzv
+
+# Beta Diversity
+### The treatment comparison shows clustering between the donors and the recipients 
+
+## creating PCoA plots for different factors 
+
+qiime emperor plot \
+  --i-pcoa core-metrics-results/bray_curtis_pcoa_results.qza \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --p-custom-axes Week_collected \
+  --o-visualization core-metrics-results/bray-curtis-emperor-days-since-experiment-start.qzv
+
+#### making statistical analysis for differences for qualitivative variables
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --m-metadata-column Treatment_Comparison \
+  --o-visualization core-metrics-results/unweighted-unifrac-body-Treatment-significanceIBD.qzv \
+  --p-pairwise\
+  --p-permdisp
+
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --m-metadata-column Treatment \
+  --o-visualization core-metrics-results/unweighted-unifrac-Treatment-significanceIBD.qzv \
+  --p-pairwise\
+  --p-permdisp
+
+
+## Creating a distance matrix using a continous variable to assess the correlation between week and beta-diversity 
+
+qiime metadata distance-matrix \
+--m-metadata-file Meta_Data_IBD_vs_Healthyremovalofcontrols.tsv.txt \
+--m-metadata-column Week_collected \
+--o-distance-matrix core-metrics-results/distance-matrix-week.qza
+
+qiime diversity mantel \
+--i-dm1 core-metrics-results/distance-matrix-week.qza \
+--i-dm2 core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+--p-method spearman \
+--p-intersect-ids True \
+--p-label1 Week \
+--p-label2 Unweighted_Unifrac \
+--o-visualization core-metrics-results/unweighted-unifrac-Week-significanceIBD.qzv
+
+#pintersect will if true wll discard sample ids that aren't found in both distance matrixs
+## permdisp will test for dispersion if it is different 
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --m-metadata-column Sex \
+  --o-visualization core-metrics-results/unweighted-unifrac-body-Sexdispersion-significanceIBD.qzv \
+  --p-pairwise\
+  --p-method 'permdisp' 
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --m-metadata-column Sex \
+  --o-visualization core-metrics-results/unweighted-unifrac-body-Sexdispersion-significanceIBD.qzv \
+  --p-pairwise\
+  --p-method 'permdisp' 
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --m-metadata-column Treatment_Comparison \
+  --o-visualization core-metrics-results/weighted-Treatment-dispersion-significanceIBD.qzv \
+  --p-pairwise\
+  --p-method 'permdisp' 
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results/bray_curtis_distance_matrix.qza  \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --m-metadata-column Treatment_Comparison \
+  --o-visualization core-metrics-results/braycurtis-treatmentdispersion-significance.qzv \
+  --p-pairwise \
+  --p-method 'permdisp'
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --m-metadata-column Sex \
+  --o-visualization core-metrics-results/unweighted-unifrac-body-Sex-significanceIBD.qzv \
+  --p-pairwise
+ 
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results/bray_curtis_distance_matrix.qza  \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --m-metadata-column Treatment_Comparison \
+  --o-visualization core-metrics-results/braycurtis-treatment-significance.qzv \
+  --p-pairwise
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --m-metadata-column Treatment_Comparison \
+  --o-visualization core-metrics-results/weighted_unifrac-treatment_significance.qzv \
+  --p-pairwise 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~`
+###Assessing Differences in the data for the Donors
+
+cd files_for_microanlaysis_IBD_study/outputs_Donors
+### create a filter table in order to assess differences in the Donors
+
+qiime feature-table filter-samples \
+  --i-table tableIBD.qza \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --p-where "[Relationship]='Donor'" \
+  --o-filtered-table Donor-table.qza
+
+#running ancom to determine if relative abundances in the IBD samples are statistically signiicant 
+
+qiime composition add-pseudocount \
+  --i-table Donor-table.qza \
+  --o-composition-table compDonor-table.qza
+
+#Ancom testing 
+qiime composition ancom \
+  --i-table compDonor-table.qza \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --o-visualization ancom-Donor.qzv
+
+qiime composition ancom \
+  --i-table compDonor-table.qza \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --m-metadata-column Treatment \
+  --o-visualization ancomcomp-DonorTreatment.qzv
+
+qiime composition ancom \
+  --i-table compDonor-table.qza \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --m-metadata-column Treatment \
+  --o-visualization ancomcomp-DonorAssignment.qzv
+
+# taxa bar plot
+
+qiime taxa barplot \
+  --i-table Donor-table.qza \
+  --i-taxonomy taxonomyIBD.qza \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --o-visualization taxa-bar-plotDonors.qzv
+
+#doing alpha and beta- diversity 
+
+qiime diversity core-metrics-phylogenetic \
+  --i-phylogeny rooted-treeIBD.qza \
+  --i-table Donor-table.qza \
+  --p-sampling-depth 25463 \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --output-dir core-metrics-results
+
+### Running alpha diversity 
+#Faith's PD
+qiime diversity alpha-group-significance \
+  --i-alpha-diversity core-metrics-results/faith_pd_vector.qza \
+  --m-metadata-file  Meta_Data_IBD_vs_Healthy.txt \
+  --o-visualization core-metrics-results/faith-pd-group-significanceDonor.qzv
+
+#Shannon's Index
+qiime diversity alpha-group-significance \
+  --i-alpha-diversity core-metrics-results/shannon_vector.qza  \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --o-visualization core-metrics-results/chao1-group-significanceDonor.qzv
+
+#creating observed features vector
+qiime diversity alpha \
+  --i-table Donor-table.qza \
+  --p-metric observed_features \
+  --o-alpha-diversity observed_features_vector.qza
+
+# creating the observed features vector 
+
+qiime diversity alpha-group-significance \
+  --i-alpha-diversity core-metrics-results/observed_features_vector.qza  \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --o-visualization core-metrics-results/observed_featuresDonors.qzv
+
+# creating the observed features alpha diversity 
+
+#observed features
+qiime diversity alpha \
+  --i-table Donor-table.qza \
+  --p-metric chao1 \
+  --o-alpha-diversity chao1_vector.qza
+
+# doing the alpha significance on this 
+
+qiime diversity alpha-group-significance \
+  --i-alpha-diversity core-metrics-results/chao1_vector.qza  \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --o-visualization core-metrics-results/chao1Donor.qzv
+
+
+## Assessing Continuous variables alpha Diversity 
+
+qiime diversity alpha-correlation \
+--i-alpha-diversity core-metrics-results/chao1_vector.qza \
+--m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+--p-intersect-ids True \
+--o-visualization Alltogether/weekcollectedchao1.qzv
+
+qiime diversity alpha-correlation \
+--i-alpha-diversity core-metrics-results/faith_pd_vector.qza  \
+--m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+--p-intersect-ids True \
+--o-visualization Alltogether/weekcollectedfaith_pd.qzv
+
+qiime diversity alpha-correlation \
+--i-alpha-diversity core-metrics-results/chao1_vector.qza \
+--m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+--p-intersect-ids True \
+--o-visualization Alltogether/weekcollectedchao1.qzv
+
+qiime diversity alpha-correlation \
+--i-alpha-diversity core-metrics-results/chao1_vector.qza \
+--m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+--p-intersect-ids True \
+--o-visualization Alltogether/weekcollectedchao1.qzv
+
+
+# True means that it will eliminate samples that do not match 
+# Beta Diversity
+
+#### making statistical analysis for differences for qualitivative variables
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results/unweighted_unifrac_distance_matrix.qza \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --m-metadata-column Treatment \
+  --o-visualization core-metrics-results/unweighted-unifrac-body-Treatment-significanceDonor.qzv \
+  --p-pairwise
+
+#pintersect will if true wll discard sample ids that aren't found in both distance matrixs
+## permdisp will test for dispersion if it is different 
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --m-metadata-column Treatment \
+  --o-visualization core-metrics-results/weighted-Treatment-dispersion-significanceDonor.qzv \
+  --p-pairwise \
+  --p-method 'permdisp' 
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results/bray_curtis_distance_matrix.qza  \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --m-metadata-column Treatment \
+  --o-visualization core-metrics-results/braycurtis-treatmentdispersion-significanceDonor.qzv \
+  --p-pairwise \
+  --p-method 'permdisp'
+
+ qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results/bray_curtis_distance_matrix.qza  \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --m-metadata-column Treatment \
+  --o-visualization core-metrics-results/braycurtis-treatment-significanceDonor.qzv \
+  --p-pairwise
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --m-metadata-column Treatment \
+  --o-visualization core-metrics-results/weighted_unifrac-treatment_significance.qzv \
+  --p-pairwise 
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix core-metrics-results/weighted_unifrac_distance_matrix.qza  \
+  --m-metadata-file Meta_Data_IBD_vs_Healthy.txt \
+  --m-metadata-column Treatment \
+  --o-visualization core-metrics-results/braycurtis-treatment-significanceDonor.qzv \
+  --p-pairwise
+
+#this gives everything you may need 
+
+
+
+  
+  
+
+
+
