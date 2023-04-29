@@ -1,0 +1,39 @@
+1. For sample depth 
+taxonomy 
+alpha-rarefaction.qzv
+stats
+table.qzv
+remove contamination
+rep-seqs
+compare to the positive, and mock community overall
+
+
+observed features is how many asv
+chao1 - richness based on rare taxa asv
+Eveness
+Faiths
+
+shannon
+simpson 
+
+Beta-diversity
+-treatment differnces
+Test the dispersion between the two groups you are running should be equivalent in total! So the spread of the different points around the center.
+Test is called perm_disp 
+
+if dispersion is ns but permanova then the difference is due to separation not having to do with dispersion
+
+--p-permdisp # for the beta-diversity add to tell if the permdisp is causing issues 
+Run this twice one  for mantel , matrix, bioeniv
+add the permdisp 
+
+
+pcoa plots - with a variable question use a axis 1! 
+
+
+qiime feature-table filter-samples \
+  --i-table table.qza \
+  --m-metadata-file sample-metadata.tsv \
+  --p-where "[body-site]='gut'" \
+  --o-filtered-table gut-table.qza
+### want to make a subset you would first mark the column site and then you would demarcate how you want to filter to just compare those columns for the amcom or other test. 
